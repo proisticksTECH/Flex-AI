@@ -64,6 +64,8 @@
         font-weight: 800;
       }
 
+      .status-wrap { display: flex; gap: 10px; align-items: center; }
+
       .status {
         padding: 6px 10px;
         border-radius: 999px;
@@ -72,6 +74,17 @@
         font-size: 12px;
         font-weight: 700;
       }
+
+      .upgrade-btn {
+        padding: 8px 12px;
+        border-radius: 10px;
+        background: var(--accent);
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      .upgrade-btn[disabled] { opacity: 0.6; cursor: default; }
 
       .chat {
         height: 480px;
@@ -162,9 +175,9 @@
         color: #000;
       }
 
-      button:hover {
-        background: #ffd234;
-      }
+      button:hover { background: #ffd234; }
+
+      .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
     </style>
   </head>
   <body>
@@ -174,7 +187,10 @@
           <div class="brand-mark">F</div>
           <span>Flex AI</span>
         </div>
-        <div class="status">Online</div>
+        <div class="status-wrap">
+          <div class="status" id="status">Online</div>
+          <button class="upgrade-btn" id="upgradeBtn">Upgrade</button>
+        </div>
       </div>
 
       <div class="chat" id="chat"></div>
@@ -189,6 +205,37 @@
       const chat = document.getElementById('chat');
       const questionInput = document.getElementById('question');
       const composer = document.getElementById('composer');
+      const upgradeBtn = document.getElementById('upgradeBtn');
+      const statusEl = document.getElementById('status');
+
+      // PRO state persisted to localStorage so "fake-buy" can't be repeated in the same browser
+      let isPro = false;
+
+      function initProState() {
+        try {
+          const stored = localStorage.getItem('flexai_isPro');
+          isPro = stored === '1';
+        } catch (e) {
+          isPro = false;
+        }
+        refreshProUI();
+      }
+
+      function refreshProUI() {
+        if (isPro) {
+          statusEl.textContent = 'Pro';
+          statusEl.style.background = '#ecfdf5';
+          statusEl.style.color = '#065f46';
+          upgradeBtn.textContent = 'Pro';
+          upgradeBtn.disabled = true;
+        } else {
+          statusEl.textContent = 'Online';
+          statusEl.style.background = '#fef3c7';
+          statusEl.style.color = '#92400e';
+          upgradeBtn.textContent = 'Upgrade';
+          upgradeBtn.disabled = false;
+        }
+      }
 
       function addMessage(role, text) {
         const row = document.createElement('div');
@@ -242,6 +289,31 @@
         questionInput.value = '';
       });
 
+      // Purchase flow - simple simulated purchase that is idempotent
+      function purchasePro() {
+        if (isPro) {
+          addMessage('bot', "You're already Pro — thanks! 🎉");
+          return;
+        }
+
+        // Simulate a checkout flow. In a real app you'd call a backend/payment gateway.
+        const ok = confirm('Upgrade to Flex Pro for $12/month? This will simulate a purchase in your browser.');
+        if (!ok) {
+          addMessage('bot', 'Purchase cancelled.');
+          return;
+        }
+
+        // Simulate success
+        isPro = true;
+        try { localStorage.setItem('flexai_isPro', '1'); } catch (e) {}
+        refreshProUI();
+        addMessage('bot', 'Thanks — you are now Flex Pro! ✦ All Pro-only features are unlocked (simulated).');
+      }
+
+      upgradeBtn.addEventListener('click', () => purchasePro());
+
+      // Initialize
+      initProState();
       addMessage('bot', 'Hi! I\'m Flex AI. Ask me anything — and for 1 + 1, the correct answer is 2! 🔢');
     </script>
   </body>

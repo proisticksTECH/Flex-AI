@@ -178,6 +178,9 @@
       button:hover { background: #ffd234; }
 
       .note { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+      /* image preview inside chat */
+      .img-preview { max-width: 240px; border-radius: 8px; border: 1px solid var(--border); box-shadow: 0 6px 18px rgba(0,0,0,0.06); display:block; margin-top:8px; }
     </style>
   </head>
   <body>
@@ -190,6 +193,7 @@
         <div class="status-wrap">
           <div class="status" id="status">Online</div>
           <button class="upgrade-btn" id="upgradeBtn">Upgrade</button>
+          <button class="upgrade-btn" id="uploadBtn">Upload Image</button>
         </div>
       </div>
 
@@ -199,6 +203,9 @@
         <input id="question" type="text" placeholder="Ask Flex AI anything..." autocomplete="off" />
         <button type="submit">Send</button>
       </form>
+
+      <!-- hidden file input for images -->
+      <input type="file" id="fileInput" accept="image/*" style="display:none" />
     </div>
 
     <script>
@@ -207,6 +214,8 @@
       const composer = document.getElementById('composer');
       const upgradeBtn = document.getElementById('upgradeBtn');
       const statusEl = document.getElementById('status');
+      const uploadBtn = document.getElementById('uploadBtn');
+      const fileInput = document.getElementById('fileInput');
 
       // PRO state persisted to localStorage so "fake-buy" can't be repeated in the same browser
       let isPro = false;
@@ -237,7 +246,7 @@
         }
       }
 
-      function addMessage(role, text) {
+      function addMessage(role, text, opts = {}) {
         const row = document.createElement('div');
         row.className = `message ${role}`;
 
@@ -247,7 +256,7 @@
 
         const bubble = document.createElement('div');
         bubble.className = 'bubble';
-        bubble.textContent = text;
+        if (opts.html) bubble.innerHTML = text; else bubble.textContent = text;
 
         if (role === 'user') {
           row.appendChild(bubble);
@@ -259,6 +268,7 @@
 
         chat.appendChild(row);
         chat.scrollTop = chat.scrollHeight;
+        return bubble; // return bubble for attaching extra nodes (like images)
       }
 
       // Improved getAnswer: handle casual greetings (sup?, what's up?) + math
@@ -274,7 +284,7 @@
           .trim();
 
         // Greeting detection (catch 'sup', "what's up", 'whats up', 'yo', etc.)
-        const greetings = ['hello','hi','hey','howdy','hiya','sup','yo','wassup','whats up','what\s+up','what is up','what's up'];
+        const greetings = ['hello','hi','hey','howdy','hiya','sup','yo','wassup','whats up','what\s+up','what is up','what\'s up'];
         for (const g of greetings) {
           const re = new RegExp('^' + g.replace(/\s+/g, '\\s+') + '(\b|\s|$)');
           if (re.test(normalized)) {
@@ -309,6 +319,70 @@
         addMessage('bot', getAnswer(value));
         questionInput.value = '';
       });
+
+      // Image upload handling: client-side analysis so it works offline or online
+      uploadBtn.addEventListener('click', () => {
+        fileInput.click();
+      });
+
+      fileInput.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        if (!f) return;
+        addMessage('user', `[image uploaded: ${f.name}]`);
+        analyzeImageFile(f);
+        e.target.value = '';
+      });
+
+      function analyzeImageFile(file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const dataURL = ev.target.result;
+          const img = new Image();
+          img.onload = () => {
+            // basic client-side analysis: dimensions + average color
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
+            // draw to canvas scaled down for performance
+            const max = 200; // sample size
+            const sw = Math.min(max, w);
+            const sh = Math.min(max, h);
+            const c = document.createElement('canvas');
+            c.width = sw;
+            c.height = sh;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(img, 0, 0, sw, sh);
+            try {
+              const id = ctx.getImageData(0,0,sw,sh).data;
+              let r=0,g=0,b=0,count=0;
+              // sample every 4th pixel for speed
+              for (let i=0;i<id.length;i+=16) { r += id[i]; g += id[i+1]; b += id[i+2]; count++; }
+              r = Math.round(r/count); g = Math.round(g/count); b = Math.round(b/count);
+              const avg = `rgb(${r}, ${g}, ${b})`;
+
+              // produce a simple description
+              const offlineNote = navigator.onLine ? '' : ' (no internet detected — analysis limited offline)';
+              const desc = `I can see you've uploaded an image${offlineNote} — basic client-side analysis:\n- Filename: ${file.name}\n- Dimensions: ${w}×${h}px\n- Approx. average color: ${avg}`;
+
+              const bubble = addMessage('bot', desc.replace(/\n/g,'\n'));
+              // attach preview image under the bot bubble
+              const imgEl = document.createElement('img');
+              imgEl.src = dataURL;
+              imgEl.className = 'img-preview';
+              bubble.appendChild(imgEl);
+
+            } catch (err) {
+              // CORS or security error reading pixels
+              const note = navigator.onLine ? '' : ' (no internet detected — analysis limited offline)';
+              addMessage('bot', `I can see you've uploaded an image${note}. I couldn't run pixel-level analysis (security/CORS). I can still display the image and you can describe what you'd like me to look for.`);
+            }
+          };
+          img.onerror = () => {
+            addMessage('bot', 'Uploaded file is not a valid image.');
+          };
+          img.src = dataURL;
+        };
+        reader.readAsDataURL(file);
+      }
 
       // Purchase flow - simple simulated purchase that is idempotent
       function purchasePro() {

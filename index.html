@@ -261,13 +261,34 @@
         chat.scrollTop = chat.scrollHeight;
       }
 
+      // Improved getAnswer: handle casual greetings (sup?, what's up?) + math
       function getAnswer(input) {
         const text = input.trim();
         if (!text) return 'Ask me anything.';
 
-        const normalized = text.toLowerCase().replace(/\s+/g, ' ').replace(/\?/g, '').trim();
-        const isSimpleMath = /(^(what'?s?|what is|whats|what\s+is|what\s+are)?\s*1\s*(?:\+|plus)\s*1$)|(^1\s*(?:\+|plus)\s*1\s*=*$)|(^1\s*\+\s*1$)/.test(normalized);
+        // Normalize: lowercase, strip surrounding punctuation (but keep +), collapse spaces
+        const normalized = text
+          .toLowerCase()
+          .replace(/["'`~()\[\]{}<>:;\\/]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
 
+        // Greeting detection (catch 'sup', "what's up", 'whats up', 'yo', etc.)
+        const greetings = ['hello','hi','hey','howdy','hiya','sup','yo','wassup','whats up','what\s+up','what is up','what's up'];
+        for (const g of greetings) {
+          const re = new RegExp('^' + g.replace(/\s+/g, '\\s+') + '(\b|\s|$)');
+          if (re.test(normalized)) {
+            const replies = [
+              "Hey! What's up?",
+              'Hi there — how can I help?',
+              "Sup? Need anything?",
+            ];
+            return replies[Math.floor(Math.random() * replies.length)];
+          }
+        }
+
+        // Simple math: 1+1 variants
+        const isSimpleMath = /(^(what'?s?|what is|whats|what\s+is|what\s+are)?\s*1\s*(?:\+|plus)\s*1$)|(^1\s*(?:\+|plus)\s*1\s*=*$)|(^1\s*\+\s*1$)/.test(normalized);
         if (isSimpleMath) {
           return 'The answer is 2! 🔢';
         }
@@ -276,7 +297,7 @@
           return 'The answer is 2! 🔢';
         }
 
-        return 'I can help with questions and explanations. For 1 + 1, the answer is 2! 🔢';
+        return "Hmm, that one threw me off. What did you mean?";
       }
 
       composer.addEventListener('submit', (event) => {
